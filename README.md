@@ -18,6 +18,20 @@ This commit is the boilerplate only. Working pieces:
 **Not yet built:** race form (Phase 2), audio recording (Phase 3),
 Whisper / Claude integration (Phase 3), pattern recognition (Phase 4).
 
+### Security model (single-user)
+
+Three layers, defence in depth:
+
+1. **`ALLOWED_EMAIL` gate** in the login server action: foreign emails
+   never reach Supabase (no enumeration — UI always says "E-Mail
+   unterwegs").
+2. **Callback re-check** in `/auth/callback`: even if a magic link is
+   ever issued for a foreign address, the post-exchange handler signs
+   them out and redirects with `?error=forbidden`.
+3. **Row-level security** in Postgres (see `supabase/policies.sql`):
+   the anon and authenticated roles can only see rows where
+   `auth.uid() = user_id`. Bucket `debriefs` is locked the same way.
+
 ## Tech stack
 
 | Layer    | Choice                                              |
@@ -28,52 +42,86 @@ Whisper / Claude integration (Phase 3), pattern recognition (Phase 4).
 | AI       | OpenAI Whisper (Phase 3), Anthropic Claude (Phase 3)|
 | Hosting  | Vercel                                              |
 
-## Local setup
+## Setup checklist
 
-### 1. Install dependencies
+Work top to bottom — each step assumes the previous ones are done. Tick
+boxes in your editor as you go.
 
-```bash
-npm install
-```
+### Local
 
-### 2. Configure environment
+- [ ] `npm install`
+- [ ] `cp .env.example .env.local`
+- [ ] Fill in `.env.local` (see env table below)
+- [ ] `npm run dev` — first run will fail loudly if any required env var
+      is missing; that's by design (Zod validation in `src/lib/env/`)
 
-Copy `.env.example` to `.env.local` and fill in real values:
+### Supabase (one-time, ~10 min)
 
-```bash
-cp .env.example .env.local
-```
+- [ ] **Create project** at <https://supabase.com> (region close to you,
+      e.g. Frankfurt)
+- [ ] **Settings → API**: copy `Project URL`, `anon public`, and
+      `service_role` keys into `.env.local`
+- [ ] **Authentication → Providers → Email**: enable Email provider,
+      keep "Confirm email" ON, no password needed (magic link only)
+- [ ] **Authentication → URL Configuration**:
+  - [ ] `Site URL` → `http://localhost:3000` (for now)
+  - [ ] Add to `Redirect URLs`:
+    - `http://localhost:3000/auth/callback`
+    - `https://<your-vercel-url>/auth/callback` (add after first deploy)
+- [ ] **SQL Editor → New query**: paste your schema (6 tables) → Run
+- [ ] **SQL Editor → New query**: paste contents of
+      [`supabase/policies.sql`](./supabase/policies.sql) → Run.
+      Enables RLS on every table + locks the `debriefs` storage bucket.
+- [ ] **Storage → New bucket**: name `debriefs`, **Private** (not used
+      until Phase 3 but easier to set up now)
+- [ ] **Email Templates → Magic Link**: optional — translate to German.
+      Keep `{{ .ConfirmationURL }}` intact.
+- [ ] After your first successful login: **Authentication → Sign-In/Up
+      → "Allow new users to sign up"** OFF (defence in depth — the
+      `ALLOWED_EMAIL` gate already blocks foreign sign-ins)
+
+### Vercel (one-time, ~5 min)
+
+- [ ] **New Project → Import** the GitHub repo `mantapanta/999`.
+      Branch: `main` (Production)
+- [ ] Framework auto-detects as Next.js — leave defaults
+- [ ] **Settings → Environment Variables**, add for **Production** AND
+      **Preview** (every required key from `.env.example`):
+  - [ ] `NEXT_PUBLIC_SUPABASE_URL`
+  - [ ] `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - [ ] `SUPABASE_SERVICE_ROLE_KEY`
+  - [ ] `ALLOWED_EMAIL`
+  - [ ] `NEXT_PUBLIC_SITE_URL` ← set to your Vercel production URL
+  - [ ] `OPENAI_API_KEY` (placeholder OK for now)
+  - [ ] `ANTHROPIC_API_KEY` (placeholder OK for now)
+- [ ] First **Deploy** → wait for green build
+- [ ] Take the live URL, go back to Supabase → URL Configuration, and
+      add it to `Site URL` + `Redirect URLs` (`/auth/callback`)
+- [ ] Optional: **Vercel Analytics** + **Speed Insights** (free)
+- [ ] Optional: **Custom Domain** → update `NEXT_PUBLIC_SITE_URL` and
+      Supabase redirects to match
+
+### Smoke test
+
+- [ ] Open production URL → redirects to `/login`
+- [ ] Type your `ALLOWED_EMAIL` → "E-Mail unterwegs" message
+- [ ] Type a different email → also "E-Mail unterwegs", but no email
+      arrives (gate working, no enumeration)
+- [ ] Click the magic link **on the same device** → land on `/races`
+      with bottom nav visible
+- [ ] iPhone Safari: Share → Add to Home Screen → app opens fullscreen
+
+### Environment variables
 
 | Variable                          | Required for      | Notes                                              |
 | --------------------------------- | ----------------- | -------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`        | Phase 1+          | From Supabase project settings → API              |
+| `NEXT_PUBLIC_SUPABASE_URL`        | Phase 1+          | From Supabase Settings → API                      |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Phase 1+          | Same place                                        |
-| `SUPABASE_SERVICE_ROLE_KEY`       | Phase 2+          | Server-only; never expose                         |
-| `ALLOWED_EMAIL`                   | Phase 1+          | Single-user gate (your email)                     |
-| `OPENAI_API_KEY`                  | Phase 3           | Whisper transcription                             |
-| `ANTHROPIC_API_KEY`               | Phase 3           | Claude debrief analysis                           |
-| `NEXT_PUBLIC_SITE_URL`            | Phase 1+          | Used as redirect base for magic links              |
-
-### 3. Set up Supabase
-
-1. Create a Supabase project at <https://supabase.com>.
-2. **Auth → Providers → Email**: enable Magic Link.
-3. **Auth → URL Configuration**: add your site URL and
-   `${SITE_URL}/auth/callback` to the redirect allow-list.
-   For local dev that's `http://localhost:3000` and
-   `http://localhost:3000/auth/callback`.
-4. **SQL Editor**: paste in the schema (6 tables: `base_setups`,
-   `setups_library`, `races`, `audio_debriefs`, `race_debrief_links`,
-   `learnings`). Provided separately — not in this repo yet.
-
-### 4. Run the dev server
-
-```bash
-npm run dev
-```
-
-Open <http://localhost:3000>. You'll be redirected to `/login`. Enter your
-email, click the link in your inbox, and you'll land on the Rennen tab.
+| `SUPABASE_SERVICE_ROLE_KEY`       | Phase 1+          | Server-only; never expose to client                |
+| `ALLOWED_EMAIL`                   | Phase 1+          | Single-user gate. Validated in login + callback    |
+| `NEXT_PUBLIC_SITE_URL`            | Phase 1+          | Magic-link redirect base                           |
+| `OPENAI_API_KEY`                  | Phase 3           | Whisper transcription (optional now)               |
+| `ANTHROPIC_API_KEY`               | Phase 3           | Claude debrief analysis (optional now)             |
 
 ## Scripts
 
@@ -109,12 +157,18 @@ src/
 │   ├── empty-state.tsx
 │   └── service-worker-register.tsx
 ├── lib/
+│   ├── env/
+│   │   ├── public.ts           # Zod-validated NEXT_PUBLIC_* vars
+│   │   └── server.ts           # Zod-validated server-only vars (server-only)
 │   ├── supabase/
 │   │   ├── client.ts           # browser client
 │   │   ├── server.ts           # server client (RSC, route handlers)
 │   │   └── middleware.ts       # session refresh
 │   └── utils.ts
 └── middleware.ts               # gates everything except /login + /auth/*
+
+supabase/
+└── policies.sql                # RLS policies — paste after schema
 public/
 ├── manifest.webmanifest
 ├── sw.js                       # offline shell cache
