@@ -68,7 +68,9 @@ boxes in your editor as you go.
   - [ ] Add to `Redirect URLs`:
     - `http://localhost:3000/auth/callback`
     - `https://<your-vercel-url>/auth/callback` (add after first deploy)
-- [ ] **SQL Editor → New query**: paste your schema (6 tables) → Run
+- [ ] **SQL Editor → New query**: paste contents of
+      [`supabase/schema.sql`](./supabase/schema.sql) → Run.
+      Creates the 6 tables, enums, indexes, and `updated_at` triggers.
 - [ ] **SQL Editor → New query**: paste contents of
       [`supabase/policies.sql`](./supabase/policies.sql) → Run.
       Enables RLS on every table + locks the `debriefs` storage bucket.
@@ -168,6 +170,7 @@ src/
 └── middleware.ts               # gates everything except /login + /auth/*
 
 supabase/
+├── schema.sql                  # 6 tables, enums, triggers — paste first
 └── policies.sql                # RLS policies — paste after schema
 public/
 ├── manifest.webmanifest
