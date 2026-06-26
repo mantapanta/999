@@ -18,6 +18,30 @@ This commit is the boilerplate only. Working pieces:
 **Not yet built:** race form (Phase 2), audio recording (Phase 3),
 Whisper / Claude integration (Phase 3), pattern recognition (Phase 4).
 
+## Taktik-Briefing-Coach (`/briefing`)
+
+A standalone, fully client-side tactics briefing tool for one-design racing
+(J70 / Dragon). No login or Supabase required — all state lives in
+`localStorage`. Reach it at `/briefing`.
+
+Four tabs:
+
+- **Bedingungen** — wind direction/strength/trend, shift character, current
+  strength, expected favoured side, venue/date.
+- **Kurs** — interactive, wind-relative SVG course (top = windward). Drag the
+  marks, start line and current arrow; line bias and current set are derived
+  from the drawing automatically.
+- **Briefing** — a rule engine (`src/lib/briefing/rules.ts`) scores ~20
+  built-in tactical rules against the conditions and outputs **max. 5**
+  prioritised rules (with category diversity, so it never overloads). Print /
+  PDF and copy-as-text export.
+- **Regeln** — the built-in rule library plus your own custom rules, triggered
+  by condition tags (e.g. light wind, current from windward, persistent right
+  shift).
+
+Key files: `src/lib/briefing/{types,rules,storage}.ts` and
+`src/app/briefing/`.
+
 ## Tech stack
 
 | Layer    | Choice                                              |
