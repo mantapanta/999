@@ -95,6 +95,10 @@ export interface BriefingState {
   conditions: Conditions;
   course: CourseLayout;
   geo: GeoState;
+  /** Hourly forecast across the day; null until weather is loaded. */
+  weatherSeries: WeatherSeries | null;
+  /** The "HH:MM" step currently shown (drives the map, chips and rules). */
+  selectedTime: string;
 }
 
 /** Normalised result of an automatic weather/current lookup. */
@@ -106,6 +110,19 @@ export interface WeatherResult {
   currentDirDeg: number;
   waveM: number | null;
   source: string;
+}
+
+/** Hourly weather/current across a racing day, for the time slider. */
+export interface WeatherSeries {
+  source: string;
+  /** "HH:MM" labels for each step. */
+  times: string[];
+  windDir: number[];
+  windKn: number[];
+  gustKn: number[];
+  currentKn: number[];
+  currentDir: number[];
+  waveM: (number | null)[];
 }
 
 export type RuleCategory =
