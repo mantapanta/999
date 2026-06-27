@@ -2,6 +2,29 @@ import type { GeoPoint, WeatherResult } from "./types";
 
 const KMH_TO_KN = 1 / 1.852;
 
+/** Selectable Open-Meteo forecast models. */
+export const WEATHER_MODELS: { id: string; label: string; note?: string }[] = [
+  { id: "best_match", label: "Auto (beste Quelle)" },
+  {
+    id: "meteofrance_arome_france_hd",
+    label: "AROME HD · 1,5 km",
+    note: "Météo-France, nur Frankreich & angrenzende Küsten",
+  },
+  {
+    id: "meteofrance_arome_france",
+    label: "AROME · 2,5 km",
+    note: "Météo-France",
+  },
+  { id: "icon_d2", label: "ICON-D2 · 2 km", note: "DWD, Mitteleuropa" },
+  { id: "icon_eu", label: "ICON-EU · 7 km", note: "DWD, Europa" },
+  { id: "ecmwf_ifs025", label: "ECMWF IFS · 9 km", note: "global" },
+  { id: "gfs_seamless", label: "GFS", note: "NOAA, global" },
+];
+
+export function modelLabel(id: string): string {
+  return WEATHER_MODELS.find((m) => m.id === id)?.label ?? id;
+}
+
 interface OpenMeteoHourly {
   time?: string[];
   [key: string]: unknown;
@@ -42,12 +65,19 @@ export async function fetchWeather(
   loc: GeoPoint,
   dateIso: string,
   timeHHMM: string,
+  model = "best_match",
 ): Promise<WeatherResult> {
   const hour = (timeHHMM || "11:00").slice(0, 2);
   const target = `${dateIso}T${hour}:00`;
   const { lat, lon } = loc;
 
+  const modelParam =
+    model && model !== "best_match" ? `&models=${model}` : "";
   const windUrl =
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
+    `&wind_speed_unit=kn&timezone=auto&forecast_days=7${modelParam}`;
+  const windFallbackUrl =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
     `&wind_speed_unit=kn&timezone=auto&forecast_days=7`;
@@ -68,23 +98,53 @@ export async function fetchWeather(
       .catch(() => null),
   ]);
 
+  const parseWind = (
+    value: { hourly?: OpenMeteoHourly } | undefined,
+  ): { dir: number; min: number; max: number } | null => {
+    const h = (value?.hourly ?? {}) as OpenMeteoHourly;
+    const i = indexForHour(h.time, target);
+    if (i < 0) return null;
+    const speed = num(h["wind_speed_10m"], i);
+    const dir = num(h["wind_direction_10m"], i);
+    const gust = num(h["wind_gusts_10m"], i);
+    if (dir == null && speed == null) return null;
+    return {
+      dir: dir != null ? Math.round(dir) : 270,
+      min: speed != null ? Math.round(speed) : 0,
+      max:
+        gust != null
+          ? Math.round(gust)
+          : speed != null
+            ? Math.round(speed)
+            : 0,
+    };
+  };
+
   let windDirDeg = 270;
   let windKnMin = 0;
   let windKnMax = 0;
-  let source = "Open-Meteo";
+  let source =
+    model && model !== "best_match" ? modelLabel(model) : "Open-Meteo";
 
-  if (windRes.status === "fulfilled" && windRes.value) {
-    const h = (windRes.value.hourly ?? {}) as OpenMeteoHourly;
-    const i = indexForHour(h.time, target);
-    if (i >= 0) {
-      const speed = num(h["wind_speed_10m"], i);
-      const dir = num(h["wind_direction_10m"], i);
-      const gust = num(h["wind_gusts_10m"], i);
-      if (dir != null) windDirDeg = Math.round(dir);
-      if (speed != null) windKnMin = Math.round(speed);
-      if (gust != null) windKnMax = Math.round(gust);
-      else if (speed != null) windKnMax = Math.round(speed);
+  let parsed =
+    windRes.status === "fulfilled" ? parseWind(windRes.value) : null;
+  // The chosen model has no data at this point (outside its domain) → fall
+  // back to the auto/best-match source so the user still gets wind.
+  if (!parsed && modelParam) {
+    try {
+      const r = await fetch(windFallbackUrl);
+      if (r.ok) {
+        parsed = parseWind(await r.json());
+        source = "Open-Meteo (Auto-Fallback)";
+      }
+    } catch {
+      /* ignore */
     }
+  }
+  if (parsed) {
+    windDirDeg = parsed.dir;
+    windKnMin = parsed.min;
+    windKnMax = parsed.max;
   }
 
   // Prefer Windy for wind if the server route returned data.

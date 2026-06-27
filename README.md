@@ -24,25 +24,27 @@ A standalone, fully client-side tactics briefing tool for one-design racing
 (J70 / Dragon). No login or Supabase required — all state lives in
 `localStorage`. Reach it at `/briefing`.
 
-Five tabs:
+The UI is split into two modes, toggled in the top bar:
 
-- **Lage** — wind direction/strength/trend, shift character, current strength,
-  expected favoured side, venue, date and start time.
-- **Karte** — a real nautical chart (OpenStreetMap base + OpenSeaMap seamark
-  overlay, via Leaflet). Set the race-area location and drop the five course
-  marks on the chart; then **load weather & current** for that point/time and
-  **project the real course into the wind-up tactical diagram** (rotated so the
-  wind blows straight down).
-- **Kurs** — interactive, wind-relative SVG course (top = windward). Drag the
-  marks, start line and current arrow; line bias and current set are derived
-  from the drawing automatically.
-- **Briefing** — a rule engine (`src/lib/briefing/rules.ts`) scores ~20
-  built-in tactical rules against the conditions and outputs **max. 5**
-  prioritised rules (with category diversity, so it never overloads). Print /
-  PDF and copy-as-text export.
+**🏁 Race view** (default) — the compact on-the-water briefing. A conditions
+chip row (wind, current, line bias, wave), quick segmented controls for the
+between-race tactical calls (shift character, favoured side), the **max. 5
+prioritised rules** as the hero, a mini course diagram, and share/print. A rule
+engine (`src/lib/briefing/rules.ts`) scores ~20 built-in tactical rules against
+the conditions and picks the top 5 with category diversity so it never
+overloads.
+
+**⚙️ Setup / admin** — everything you configure, in three tabs:
+
+- **Kurs & Ort** — a real nautical chart (OpenStreetMap base + OpenSeaMap
+  seamark overlay, via Leaflet). Set the race-area location and drop the five
+  course marks; **load weather & current** and **project the real course into
+  the wind-up tactical diagram** (rotated so the wind blows straight down).
+- **Wetter & Modell** — pick the forecast **model** (Auto, AROME HD, ICON-D2,
+  ICON-EU, ECMWF, GFS), load weather, and manually override any condition.
 - **Regeln** — the built-in rule library plus your own custom rules, triggered
   by condition tags (e.g. light wind, current from windward, persistent right
-  shift).
+  shift). Rules are administered here only.
 
 ### Weather & current auto-load
 

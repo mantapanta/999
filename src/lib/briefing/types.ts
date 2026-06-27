@@ -78,6 +78,8 @@ export interface Conditions {
   currentKn: number;
   /** Compass bearing the current flows TOWARD (0–360). */
   currentDirDeg: number;
+  /** Open-Meteo weather model id used for the auto wind lookup. */
+  weatherModel: string;
   /** Side of the beat the sailor expects to pay (pressure / strategy call). */
   favoredSide: Side;
   /** Significant wave height in metres, if known (from the marine forecast). */
