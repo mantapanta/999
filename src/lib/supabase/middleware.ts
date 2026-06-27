@@ -50,7 +50,11 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  // Root "/" just redirects to the public briefing coach, so let it through —
+  // otherwise an unauthenticated visitor to the bare domain is bounced to the
+  // magic-link login that belongs to the (separate) trim-log app.
+  const isPublic =
+    pathname === "/" || PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
