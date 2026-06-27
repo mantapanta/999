@@ -13,7 +13,12 @@ import {
   saveCustomRules,
   saveState,
 } from "@/lib/briefing/storage";
-import { currentArrow, hasAllMarks, projectGeoToCourse } from "@/lib/briefing/geo";
+import {
+  autoCourse,
+  currentArrow,
+  hasAllMarks,
+  projectGeoToCourse,
+} from "@/lib/briefing/geo";
 import { fetchWeather } from "@/lib/briefing/weather";
 import type {
   BriefingState,
@@ -87,24 +92,47 @@ export default function BriefingPage() {
       );
       setState((s) => {
         const arrow = currentArrow(w.windDirDeg, w.currentDirDeg);
+        const conditions = {
+          ...s.conditions,
+          windDirDeg: w.windDirDeg,
+          windKnMin: w.windKnMin,
+          windKnMax: w.windKnMax,
+          currentKn: w.currentKn,
+          currentDirDeg: w.currentDirDeg,
+          waveM: w.waveM,
+          weatherSource: w.source,
+        };
+        // Auto-build a standard Up/Down course on the area from the wind, so
+        // the morning briefing needs only the sailing area — no mark setting.
+        if (s.geo.location) {
+          const marks = autoCourse(
+            s.geo.location,
+            w.windDirDeg,
+            s.conditions.beatLengthNm,
+          );
+          const geo = { ...s.geo, marks };
+          return {
+            ...s,
+            conditions,
+            geo,
+            course: projectGeoToCourse(
+              geo,
+              w.windDirDeg,
+              w.currentDirDeg,
+              s.course,
+            ),
+          };
+        }
         return {
           ...s,
-          conditions: {
-            ...s.conditions,
-            windDirDeg: w.windDirDeg,
-            windKnMin: w.windKnMin,
-            windKnMax: w.windKnMax,
-            currentKn: w.currentKn,
-            currentDirDeg: w.currentDirDeg,
-            waveM: w.waveM,
-            weatherSource: w.source,
-          },
+          conditions,
           course: { ...s.course, currentFrom: arrow.from, currentTo: arrow.to },
         };
       });
       setWeatherMsg(
         `Geladen (${w.source}): Wind ${w.windDirDeg}° · ${w.windKnMin}–${w.windKnMax} kn · Strom ${w.currentKn} kn` +
-          (w.waveM != null ? ` · Welle ${w.waveM} m` : ""),
+          (w.waveM != null ? ` · Welle ${w.waveM} m` : "") +
+          (state.geo.location ? " · Kurs automatisch gelegt" : ""),
       );
     } catch {
       setWeatherMsg("Wetter konnte nicht geladen werden (Netzwerk prüfen).");
@@ -124,6 +152,50 @@ export default function BriefingPage() {
       ),
     }));
     setView("race");
+  };
+
+  // Build the Up/Down course from the area + current wind, without refetching.
+  const generateCourse = (gotoRace = false) => {
+    setState((s) => {
+      if (!s.geo.location) return s;
+      const marks = autoCourse(
+        s.geo.location,
+        s.conditions.windDirDeg,
+        s.conditions.beatLengthNm,
+      );
+      const geo = { ...s.geo, marks };
+      return {
+        ...s,
+        geo,
+        course: projectGeoToCourse(
+          geo,
+          s.conditions.windDirDeg,
+          s.conditions.currentDirDeg,
+          s.course,
+        ),
+      };
+    });
+    if (gotoRace) setView("race");
+  };
+
+  const setBeatLength = (beatLengthNm: number) => {
+    setState((s) => {
+      const conditions = { ...s.conditions, beatLengthNm };
+      if (!s.geo.location) return { ...s, conditions };
+      const marks = autoCourse(s.geo.location, s.conditions.windDirDeg, beatLengthNm);
+      const geo = { ...s.geo, marks };
+      return {
+        ...s,
+        conditions,
+        geo,
+        course: projectGeoToCourse(
+          geo,
+          s.conditions.windDirDeg,
+          s.conditions.currentDirDeg,
+          s.course,
+        ),
+      };
+    });
   };
 
   return (
@@ -195,6 +267,8 @@ export default function BriefingPage() {
             weatherBusy={weatherBusy}
             weatherMsg={weatherMsg}
             onApplyCourse={applyCourseFromChart}
+            onGenerateCourse={() => generateCourse(false)}
+            onSetBeatLength={setBeatLength}
             allMarks={hasAllMarks(state.geo)}
           />
         )}

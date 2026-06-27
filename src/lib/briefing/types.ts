@@ -80,6 +80,8 @@ export interface Conditions {
   currentDirDeg: number;
   /** Open-Meteo weather model id used for the auto wind lookup. */
   weatherModel: string;
+  /** Length of the first beat in nautical miles — used to auto-build the course. */
+  beatLengthNm: number;
   /** Side of the beat the sailor expects to pay (pressure / strategy call). */
   favoredSide: Side;
   /** Significant wave height in metres, if known (from the marine forecast). */

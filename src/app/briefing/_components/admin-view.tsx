@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { CloudDownload, MoveRight, Loader2 } from "lucide-react";
+import { CloudDownload, MoveRight, Loader2, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -45,6 +45,8 @@ export function AdminView({
   weatherBusy,
   weatherMsg,
   onApplyCourse,
+  onGenerateCourse,
+  onSetBeatLength,
   allMarks,
 }: {
   state: BriefingState;
@@ -57,6 +59,8 @@ export function AdminView({
   weatherBusy: boolean;
   weatherMsg: string | null;
   onApplyCourse: () => void;
+  onGenerateCourse: () => void;
+  onSetBeatLength: (nm: number) => void;
   allMarks: boolean;
 }) {
   const [tab, setTab] = React.useState<AdminTab>("course");
@@ -86,11 +90,43 @@ export function AdminView({
 
       {tab === "course" ? (
         <div className="space-y-4 px-4">
+          <div className="rounded-xl border border-teal-200 bg-teal-50 p-3">
+            <p className="text-sm font-medium">
+              1. Segelgebiet auf der Karte setzen → 2. Wetter laden.
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Die App legt automatisch einen windorientierten Up/Down-Kurs aufs
+              Revier. Tonnen musst du nicht setzen — das weißt du erst draußen.
+            </p>
+          </div>
+
           <MapEditor
             geo={state.geo}
             onSetLocation={setLocation}
             onSetMark={setMark}
           />
+
+          <div>
+            <p className="mb-1.5 text-sm font-medium">Kreuzlänge (1. Kreuz)</p>
+            <div className="grid grid-flow-col auto-cols-fr gap-1 rounded-lg border bg-secondary p-1">
+              {[0.6, 0.75, 1.0].map((nm) => (
+                <button
+                  key={nm}
+                  type="button"
+                  onClick={() => onSetBeatLength(nm)}
+                  className={cn(
+                    "rounded-md px-2 py-2 text-sm font-medium transition-colors",
+                    Math.abs(state.conditions.beatLengthNm - nm) < 0.01
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {nm.toFixed(2).replace(/0$/, "")} sm
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Button
               onClick={onRefreshWeather}
@@ -102,29 +138,52 @@ export function AdminView({
               ) : (
                 <CloudDownload className="h-5 w-5" />
               )}
-              Wetter &amp; Strom laden
+              Wetter laden &amp; Kurs automatisch legen
             </Button>
             {weatherMsg ? (
               <p className="rounded-lg bg-secondary px-3 py-2 text-sm">
                 {weatherMsg}
               </p>
             ) : null}
+            {!state.geo.location ? (
+              <p className="text-xs text-muted-foreground">
+                Tippe oben auf die Karte (oder nutze Suche / Standort), um das
+                Revier zu setzen.
+              </p>
+            ) : (
+              <Button
+                variant="ghost"
+                onClick={onGenerateCourse}
+                className="w-full text-muted-foreground"
+              >
+                <Wand2 className="h-4 w-4" /> Kurs neu aus aktuellem Wind legen
+              </Button>
+            )}
+          </div>
+
+          <details className="rounded-xl border bg-card p-3">
+            <summary className="cursor-pointer text-sm font-medium">
+              Tonnen manuell setzen (optional)
+            </summary>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Wenn du draußen die echten Positionen kennst: oben über die Karte
+              die einzelnen Marken setzen, dann hier übernehmen.
+            </p>
             <Button
               variant="outline"
               onClick={onApplyCourse}
               disabled={!allMarks}
-              className="w-full"
+              className="mt-2 w-full"
             >
               <MoveRight className="h-5 w-5" />
-              Kurs ins Taktik-Diagramm übernehmen
+              Manuell gesetzten Kurs übernehmen
             </Button>
             {!allMarks ? (
-              <p className="text-xs text-muted-foreground">
-                Setze alle fünf Marken (Luv, Komitee, Pin, Lee L, Lee R), um den
-                echten Kurs windgedreht zu übernehmen.
+              <p className="mt-1 text-xs text-muted-foreground">
+                Dafür alle fünf Marken (Luv, Komitee, Pin, Lee L, Lee R) setzen.
               </p>
             ) : null}
-          </div>
+          </details>
         </div>
       ) : null}
 
