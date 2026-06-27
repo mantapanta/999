@@ -83,3 +83,22 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* Print: show only the briefing card so it prints / exports as a clean PDF */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0;
+    padding: 1rem;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

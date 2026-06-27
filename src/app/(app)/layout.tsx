@@ -8,10 +8,22 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Without Supabase configured there is no auth-backed app — send people to
+  // the standalone briefing coach instead of crashing.
+  if (
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  ) {
+    redirect("/briefing");
+  }
+
+  let user = null;
+  try {
+    const supabase = await createClient();
+    user = (await supabase.auth.getUser()).data.user;
+  } catch {
+    user = null;
+  }
 
   if (!user) {
     redirect("/login");
