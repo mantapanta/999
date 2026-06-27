@@ -50,6 +50,50 @@ export function hasAllMarks(geo: GeoState): boolean {
   return MARK_KEYS.every((k) => !!geo.marks[k]);
 }
 
+/** Move from a point by `distM` metres along a compass `bearingDeg`. */
+function destPoint(p: GeoPoint, distM: number, bearingDeg: number): GeoPoint {
+  const br = bearingDeg * DEG;
+  const north = distM * Math.cos(br);
+  const east = distM * Math.sin(br);
+  return {
+    lat: p.lat + north / 110_540,
+    lon: p.lon + east / (111_320 * Math.cos(p.lat * DEG)),
+  };
+}
+
+/**
+ * Generate a standard windward/leeward course around a sailing area, oriented
+ * to the wind. The morning pre-briefing only needs the *area* — the race
+ * committee will lay a beat of roughly this length upwind, so we synthesise a
+ * realistic Up/Down course rather than asking for exact mark positions.
+ */
+export function autoCourse(
+  area: GeoPoint,
+  windDirDeg: number,
+  beatNm: number,
+): Record<MarkKey, GeoPoint> {
+  const NM = 1852;
+  const beat = Math.max(beatNm, 0.2) * NM;
+  const upwind = windDirDeg; // toward the wind source
+  const right = windDirDeg + 90;
+  const lineHalf = Math.max(beat * 0.12, 70); // half the start-line length
+  const gateUp = beat * 0.1; // gate sits just above the start
+  const gateHalf = Math.max(beat * 0.04, 20);
+
+  const start = area; // start line centred on the area location
+  return {
+    windward: destPoint(start, beat, upwind),
+    committee: destPoint(start, lineHalf, right),
+    pin: destPoint(start, lineHalf, right + 180),
+    leewardRight: destPoint(destPoint(start, gateUp, upwind), gateHalf, right),
+    leewardLeft: destPoint(
+      destPoint(start, gateUp, upwind),
+      gateHalf,
+      right + 180,
+    ),
+  };
+}
+
 /**
  * Project real (lat/lon) course marks into the wind-up viewBox frame so the
  * briefing diagram shows the actual course geometry, rotated so the wind blows

@@ -18,6 +18,7 @@ export function defaultState(): BriefingState {
       currentKn: 0,
       currentDirDeg: 180,
       weatherModel: "best_match",
+      beatLengthNm: 0.75,
       favoredSide: "unknown",
       waveM: null,
       weatherSource: null,
