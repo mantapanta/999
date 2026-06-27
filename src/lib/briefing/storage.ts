@@ -17,6 +17,7 @@ export function defaultState(): BriefingState {
       shift: "oscillating",
       currentKn: 0,
       currentDirDeg: 180,
+      weatherModel: "best_match",
       favoredSide: "unknown",
       waveM: null,
       weatherSource: null,
