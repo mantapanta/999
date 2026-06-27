@@ -69,14 +69,15 @@ export function ConditionsPanel({
 
   return (
     <div className="space-y-5 px-5">
+      <Field label="Revier / Ort">
+        <Input
+          value={conditions.venue}
+          placeholder="z. B. Kiel"
+          onChange={(e) => set("venue", e.target.value)}
+        />
+      </Field>
+
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Revier / Ort">
-          <Input
-            value={conditions.venue}
-            placeholder="z. B. Kiel"
-            onChange={(e) => set("venue", e.target.value)}
-          />
-        </Field>
         <Field label="Datum">
           <Input
             type="date"
@@ -84,7 +85,21 @@ export function ConditionsPanel({
             onChange={(e) => set("date", e.target.value)}
           />
         </Field>
+        <Field label="Startzeit" hint="für die Wetter-Vorhersage">
+          <Input
+            type="time"
+            value={conditions.time}
+            onChange={(e) => set("time", e.target.value)}
+          />
+        </Field>
       </div>
+
+      {conditions.weatherSource ? (
+        <p className="rounded-lg bg-secondary px-3 py-2 text-xs text-muted-foreground">
+          Wind &amp; Strom automatisch geladen ({conditions.weatherSource}). Du
+          kannst die Werte unten weiterhin manuell anpassen.
+        </p>
+      ) : null}
 
       <Field label="Bezeichnung" hint="z. B. „Race 3“ oder „Morgen-Briefing“">
         <Input

@@ -24,10 +24,15 @@ A standalone, fully client-side tactics briefing tool for one-design racing
 (J70 / Dragon). No login or Supabase required — all state lives in
 `localStorage`. Reach it at `/briefing`.
 
-Four tabs:
+Five tabs:
 
-- **Bedingungen** — wind direction/strength/trend, shift character, current
-  strength, expected favoured side, venue/date.
+- **Lage** — wind direction/strength/trend, shift character, current strength,
+  expected favoured side, venue, date and start time.
+- **Karte** — a real nautical chart (OpenStreetMap base + OpenSeaMap seamark
+  overlay, via Leaflet). Set the race-area location and drop the five course
+  marks on the chart; then **load weather & current** for that point/time and
+  **project the real course into the wind-up tactical diagram** (rotated so the
+  wind blows straight down).
 - **Kurs** — interactive, wind-relative SVG course (top = windward). Drag the
   marks, start line and current arrow; line bias and current set are derived
   from the drawing automatically.
@@ -39,8 +44,20 @@ Four tabs:
   by condition tags (e.g. light wind, current from windward, persistent right
   shift).
 
-Key files: `src/lib/briefing/{types,rules,storage}.ts` and
-`src/app/briefing/`.
+### Weather & current auto-load
+
+`fetchWeather()` (`src/lib/briefing/weather.ts`) pulls wind, gusts, **ocean
+current** and wave height from [Open-Meteo](https://open-meteo.com) — free, no
+API key, called straight from the browser. The loaded current bearing orients
+the tactical diagram's current arrow automatically.
+
+Windy is supported as an **optional** wind source: set `WINDY_API_KEY` and the
+`/api/windy-wind` route fetches wind/gusts from the Windy Point Forecast API
+(preferred over Open-Meteo for wind when present). Note: Windy's *point* API
+does **not** expose ocean currents, so current always comes from Open-Meteo.
+
+Key files: `src/lib/briefing/{types,rules,storage,geo,weather}.ts`,
+`src/app/briefing/`, `src/app/api/windy-wind/route.ts`.
 
 ## Tech stack
 

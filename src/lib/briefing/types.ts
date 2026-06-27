@@ -16,6 +16,35 @@ export interface Point {
   y: number;
 }
 
+/** A geographic position (WGS84). */
+export interface GeoPoint {
+  lat: number;
+  lon: number;
+}
+
+/** The course marks that can be placed on a real chart. */
+export type MarkKey =
+  | "windward"
+  | "committee"
+  | "pin"
+  | "leewardLeft"
+  | "leewardRight";
+
+export const MARK_KEYS: MarkKey[] = [
+  "windward",
+  "committee",
+  "pin",
+  "leewardLeft",
+  "leewardRight",
+];
+
+export interface GeoState {
+  /** Race-area location, used as the point for the weather/current lookup. */
+  location: GeoPoint | null;
+  /** Real positions of the course marks drawn on the chart. */
+  marks: Partial<Record<MarkKey, GeoPoint>>;
+}
+
 export interface CourseLayout {
   /** Start line starboard end (Komiteeboot). */
   committee: Point;
@@ -36,8 +65,10 @@ export interface CourseLayout {
 export interface Conditions {
   venue: string;
   date: string; // ISO date (yyyy-mm-dd)
+  /** Target time of day for the forecast lookup (HH:MM). */
+  time: string;
   raceLabel: string;
-  /** Compass bearing the wind comes FROM (0–360). Metadata for the briefing text. */
+  /** Compass bearing the wind comes FROM (0–360). */
   windDirDeg: number;
   windKnMin: number;
   windKnMax: number;
@@ -45,14 +76,32 @@ export interface Conditions {
   shift: ShiftType;
   /** Current strength in knots (0 = no current). */
   currentKn: number;
+  /** Compass bearing the current flows TOWARD (0–360). */
+  currentDirDeg: number;
   /** Side of the beat the sailor expects to pay (pressure / strategy call). */
   favoredSide: Side;
+  /** Significant wave height in metres, if known (from the marine forecast). */
+  waveM: number | null;
+  /** Where the auto-loaded weather came from, e.g. "Open-Meteo" or "Windy". */
+  weatherSource: string | null;
   notes: string;
 }
 
 export interface BriefingState {
   conditions: Conditions;
   course: CourseLayout;
+  geo: GeoState;
+}
+
+/** Normalised result of an automatic weather/current lookup. */
+export interface WeatherResult {
+  windDirDeg: number;
+  windKnMin: number;
+  windKnMax: number;
+  currentKn: number;
+  currentDirDeg: number;
+  waveM: number | null;
+  source: string;
 }
 
 export type RuleCategory =

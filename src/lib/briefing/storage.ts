@@ -8,6 +8,7 @@ export function defaultState(): BriefingState {
     conditions: {
       venue: "",
       date: new Date().toISOString().slice(0, 10),
+      time: "11:00",
       raceLabel: "Morgen-Briefing",
       windDirDeg: 270,
       windKnMin: 8,
@@ -15,8 +16,15 @@ export function defaultState(): BriefingState {
       trend: "steady",
       shift: "oscillating",
       currentKn: 0,
+      currentDirDeg: 180,
       favoredSide: "unknown",
+      waveM: null,
+      weatherSource: null,
       notes: "",
+    },
+    geo: {
+      location: null,
+      marks: {},
     },
     // Wind-up frame: viewBox 100 x 140, top = upwind.
     course: {
@@ -45,6 +53,10 @@ export function loadState(): BriefingState | null {
     return {
       conditions: { ...base.conditions, ...parsed.conditions },
       course: { ...base.course, ...parsed.course },
+      geo: {
+        location: parsed.geo?.location ?? base.geo.location,
+        marks: { ...base.geo.marks, ...parsed.geo?.marks },
+      },
     };
   } catch {
     return null;

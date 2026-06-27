@@ -44,7 +44,7 @@ function buildText(
   facts: Facts,
 ): string {
   const c = state.conditions;
-  const head = [c.raceLabel, c.venue, c.date].filter(Boolean).join(" · ");
+  const head = [c.raceLabel, c.venue, `${c.date} ${c.time}`].filter(Boolean).join(" · ");
   const lines: string[] = [];
   lines.push(`SEGEL-BRIEFING — ${head}`);
   lines.push("");
@@ -53,6 +53,7 @@ function buildText(
   );
   lines.push(`Dreher: ${SHIFT_LABEL[c.shift]}`);
   lines.push(`Strom: ${currentSummary(facts)}`);
+  if (c.waveM != null) lines.push(`Welle: ${c.waveM} m`);
   lines.push(`Startlinie: ${biasLabel(facts)}`);
   lines.push(`Vorzugsseite: ${SIDE_LABEL[c.favoredSide]}`);
   if (c.notes.trim()) lines.push(`Notizen: ${c.notes.trim()}`);
@@ -79,7 +80,7 @@ export function BriefingOutput({
     customRules,
   );
   const c = state.conditions;
-  const head = [c.raceLabel, c.venue, c.date].filter(Boolean).join(" · ");
+  const head = [c.raceLabel, c.venue, `${c.date} ${c.time}`].filter(Boolean).join(" · ");
 
   const copy = async () => {
     try {
@@ -134,6 +135,9 @@ export function BriefingOutput({
             <KeyRow label="Tendenz" value={TREND_LABEL[c.trend]} />
             <KeyRow label="Dreher" value={SHIFT_LABEL[c.shift]} />
             <KeyRow label="Strom" value={currentSummary(facts)} />
+            {c.waveM != null ? (
+              <KeyRow label="Welle" value={`${c.waveM} m`} />
+            ) : null}
             <KeyRow label="Startlinie" value={biasLabel(facts)} />
             <KeyRow label="Vorzugsseite" value={SIDE_LABEL[c.favoredSide]} />
           </div>
