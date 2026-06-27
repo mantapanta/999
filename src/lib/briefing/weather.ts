@@ -1,6 +1,10 @@
-import type { GeoPoint, WeatherResult } from "./types";
+import type { GeoPoint, WeatherResult, WeatherSeries } from "./types";
 
 const KMH_TO_KN = 1 / 1.852;
+
+/** First/last hour of the racing window to keep in the day series. */
+const DAY_START_HOUR = 6;
+const DAY_END_HOUR = 20;
 
 /** Selectable Open-Meteo forecast models. */
 export const WEATHER_MODELS: { id: string; label: string; note?: string }[] = [
@@ -23,6 +27,127 @@ export const WEATHER_MODELS: { id: string; label: string; note?: string }[] = [
 
 export function modelLabel(id: string): string {
   return WEATHER_MODELS.find((m) => m.id === id)?.label ?? id;
+}
+
+interface HourlyResp {
+  hourly?: { time?: string[]; [k: string]: unknown };
+}
+
+/** Find the series step whose label is closest to "HH:MM". */
+export function seriesIndexForTime(series: WeatherSeries, hhmm: string): number {
+  if (series.times.length === 0) return 0;
+  const exact = series.times.indexOf(hhmm);
+  if (exact >= 0) return exact;
+  const targetH = parseInt(hhmm.slice(0, 2), 10) || 11;
+  let best = 0;
+  let bestDiff = Infinity;
+  series.times.forEach((t, i) => {
+    const diff = Math.abs(parseInt(t.slice(0, 2), 10) - targetH);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = i;
+    }
+  });
+  return best;
+}
+
+/**
+ * Fetch the hourly wind + current + wave series for a whole racing day. Powers
+ * the day time-slider so the map and rules can be scrubbed across the day.
+ */
+export async function fetchWeatherSeries(
+  loc: GeoPoint,
+  dateIso: string,
+  model = "best_match",
+): Promise<WeatherSeries> {
+  const { lat, lon } = loc;
+  const modelParam = model && model !== "best_match" ? `&models=${model}` : "";
+  const base =
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
+    `&wind_speed_unit=kn&timezone=auto&forecast_days=7`;
+  const windUrl = base + modelParam;
+  const marineUrl =
+    `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}` +
+    `&hourly=ocean_current_velocity,ocean_current_direction,wave_height` +
+    `&timezone=auto&forecast_days=7`;
+
+  const getJson = (url: string) =>
+    fetch(url).then((r) => (r.ok ? (r.json() as Promise<HourlyResp>) : null));
+
+  const [windInit, marine] = await Promise.all([
+    getJson(windUrl).catch(() => null),
+    getJson(marineUrl).catch(() => null),
+  ]);
+  let wind = windInit;
+
+  const inWindow = (t: string) => {
+    const h = parseInt(t.slice(11, 13), 10);
+    return t.startsWith(dateIso) && h >= DAY_START_HOUR && h <= DAY_END_HOUR;
+  };
+
+  let wh = wind?.hourly;
+  let windTimes = (wh?.time ?? []).filter(inWindow);
+  // Chosen model has no data for this day/area → fall back to best match.
+  if (windTimes.length === 0 && modelParam) {
+    wind = await getJson(base).catch(() => null);
+    wh = wind?.hourly;
+    windTimes = (wh?.time ?? []).filter(inWindow);
+  }
+  if (!wh || windTimes.length === 0) {
+    throw new Error("no forecast for this day");
+  }
+
+  const wTimeAll = wh.time ?? [];
+  const idxByTime = (t: string) => wTimeAll.indexOf(t);
+
+  // Marine arrays keyed by their own time strings.
+  const mh = marine?.hourly;
+  const mTime = mh?.time ?? [];
+  const marineIdx = (t: string) => mTime.indexOf(t);
+
+  const arr = (o: { [k: string]: unknown } | undefined, key: string) =>
+    (o?.[key] as (number | null)[] | undefined) ?? [];
+
+  const wSpeed = arr(wh, "wind_speed_10m");
+  const wDir = arr(wh, "wind_direction_10m");
+  const wGust = arr(wh, "wind_gusts_10m");
+  const cVel = arr(mh, "ocean_current_velocity");
+  const cDir = arr(mh, "ocean_current_direction");
+  const wave = arr(mh, "wave_height");
+
+  const series: WeatherSeries = {
+    source: model && model !== "best_match" ? modelLabel(model) : "Open-Meteo",
+    times: [],
+    windDir: [],
+    windKn: [],
+    gustKn: [],
+    currentKn: [],
+    currentDir: [],
+    waveM: [],
+  };
+
+  for (const t of windTimes) {
+    const wi = idxByTime(t);
+    const mi = marineIdx(t);
+    const dir = wi >= 0 ? wDir[wi] : null;
+    const spd = wi >= 0 ? wSpeed[wi] : null;
+    const gst = wi >= 0 ? wGust[wi] : null;
+    const cv = mi >= 0 ? cVel[mi] : null;
+    const cd = mi >= 0 ? cDir[mi] : null;
+    const wv = mi >= 0 ? wave[mi] : null;
+    series.times.push(t.slice(11, 16));
+    series.windDir.push(dir != null ? Math.round(dir) : 270);
+    series.windKn.push(spd != null ? Math.round(spd) : 0);
+    series.gustKn.push(
+      gst != null ? Math.round(gst) : spd != null ? Math.round(spd) : 0,
+    );
+    series.currentKn.push(cv != null ? Math.round(cv * KMH_TO_KN * 10) / 10 : 0);
+    series.currentDir.push(cd != null ? Math.round(cd) : 180);
+    series.waveM.push(wv != null ? Math.round(wv * 10) / 10 : null);
+  }
+
+  return series;
 }
 
 interface OpenMeteoHourly {

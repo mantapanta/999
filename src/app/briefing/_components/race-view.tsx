@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import {
   Wind,
   Waves,
@@ -11,17 +12,12 @@ import {
   Check,
   Printer,
   Loader2,
+  Clock,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CourseCanvas } from "./course-canvas";
-import {
-  STRENGTH_LABEL,
-  SHIFT_LABEL,
-  biasLabel,
-  selectBriefing,
-} from "@/lib/briefing/rules";
+import { STRENGTH_LABEL, biasLabel, selectBriefing } from "@/lib/briefing/rules";
 import { buildBriefingText, currentSummary } from "@/lib/briefing/format";
 import type {
   BriefingState,
@@ -29,7 +25,17 @@ import type {
   CustomRule,
   ShiftType,
   Side,
+  WeatherSeries,
 } from "@/lib/briefing/types";
+
+const RaceMap = dynamic(() => import("./race-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[46vh] min-h-[280px] items-center justify-center rounded-2xl border text-sm text-muted-foreground">
+      Karte wird geladen …
+    </div>
+  ),
+});
 
 function Chip({
   icon,
@@ -97,6 +103,7 @@ export function RaceView({
   customRules,
   onChange,
   onRefreshWeather,
+  onSelectHour,
   weatherBusy,
   hasLocation,
 }: {
@@ -104,6 +111,7 @@ export function RaceView({
   customRules: CustomRule[];
   onChange: (c: Conditions) => void;
   onRefreshWeather: () => void;
+  onSelectHour: (hhmm: string) => void;
   weatherBusy: boolean;
   hasLocation: boolean;
 }) {
@@ -114,14 +122,15 @@ export function RaceView({
     customRules,
   );
   const c = state.conditions;
+  const series: WeatherSeries | null = state.weatherSeries;
   const set = <K extends keyof Conditions>(k: K, v: Conditions[K]) =>
     onChange({ ...c, [k]: v });
 
+  const idx = series ? Math.max(0, series.times.indexOf(state.selectedTime)) : 0;
+
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(
-        buildBriefingText(state, top, facts),
-      );
+      await navigator.clipboard.writeText(buildBriefingText(state, top, facts));
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -134,9 +143,7 @@ export function RaceView({
       {/* Header band */}
       <div
         className="rounded-2xl px-4 py-4 text-white shadow-sm"
-        style={{
-          background: "linear-gradient(135deg,#0f2a44 0%,#15507a 100%)",
-        }}
+        style={{ background: "linear-gradient(135deg,#0f2a44 0%,#15507a 100%)" }}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -147,7 +154,9 @@ export function RaceView({
               placeholder="Race / Briefing"
             />
             <p className="mt-0.5 truncate text-sm text-white/70">
-              {[c.venue || "Ort offen", c.time].filter(Boolean).join(" · ")}
+              {[c.venue || "Revier offen", state.selectedTime]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
           </div>
           <Button
@@ -155,11 +164,7 @@ export function RaceView({
             disabled={weatherBusy || !hasLocation}
             size="sm"
             className="shrink-0 bg-white/15 text-white hover:bg-white/25"
-            title={
-              hasLocation
-                ? "Wetter aktualisieren"
-                : "Erst Standort im Setup setzen"
-            }
+            title={hasLocation ? "Wetter laden" : "Erst Revier im Setup setzen"}
           >
             {weatherBusy ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -170,6 +175,48 @@ export function RaceView({
           </Button>
         </div>
       </div>
+
+      {/* The map: race area + course + wind/current */}
+      <RaceMap
+        geo={state.geo}
+        windDirDeg={c.windDirDeg}
+        currentDirDeg={c.currentDirDeg}
+        currentKn={c.currentKn}
+      />
+
+      {/* Day time slider */}
+      {series && series.times.length > 1 ? (
+        <div className="rounded-xl border bg-card px-3 py-2.5">
+          <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5" /> Tagesverlauf
+            </span>
+            <span className="font-semibold text-foreground">
+              {state.selectedTime} · {c.windDirDeg}° · {c.windKnMin}–
+              {c.windKnMax} kn
+            </span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={series.times.length - 1}
+            value={idx}
+            onChange={(e) =>
+              onSelectHour(series.times[parseInt(e.target.value, 10)])
+            }
+            className="w-full accent-[#15507a]"
+          />
+          <div className="flex justify-between text-[10px] text-muted-foreground">
+            <span>{series.times[0]}</span>
+            <span>{series.times[series.times.length - 1]}</span>
+          </div>
+        </div>
+      ) : !hasLocation ? (
+        <p className="rounded-xl border border-dashed bg-card px-3 py-3 text-center text-sm text-muted-foreground">
+          Im <span className="font-medium">Setup</span> das Revier setzen und
+          Wetter laden — dann erscheint hier Kurs, Wind &amp; Strom über den Tag.
+        </p>
+      ) : null}
 
       {/* Conditions chips */}
       <div className="grid grid-cols-2 gap-2">
@@ -240,7 +287,9 @@ export function RaceView({
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Deine {top.length} Regeln
           </h2>
-          <span className="text-xs text-muted-foreground">{SHIFT_LABEL[c.shift]}</span>
+          <span className="text-xs text-muted-foreground">
+            Stand {state.selectedTime}
+          </span>
         </div>
         <ol className="space-y-2">
           {top.map((r, i) => (
@@ -265,15 +314,6 @@ export function RaceView({
             </li>
           ) : null}
         </ol>
-      </div>
-
-      {/* Mini course */}
-      <div className="mx-auto max-w-[260px]">
-        <CourseCanvas
-          course={state.course}
-          conditions={state.conditions}
-          readOnly
-        />
       </div>
 
       {/* Actions */}

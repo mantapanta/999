@@ -28,6 +28,8 @@ export function defaultState(): BriefingState {
       location: null,
       marks: {},
     },
+    weatherSeries: null,
+    selectedTime: "11:00",
     // Wind-up frame: viewBox 100 x 140, top = upwind.
     course: {
       windward: { x: 50, y: 18 },
@@ -59,6 +61,8 @@ export function loadState(): BriefingState | null {
         location: parsed.geo?.location ?? base.geo.location,
         marks: { ...base.geo.marks, ...parsed.geo?.marks },
       },
+      weatherSeries: parsed.weatherSeries ?? null,
+      selectedTime: parsed.selectedTime ?? base.selectedTime,
     };
   } catch {
     return null;

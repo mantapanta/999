@@ -19,14 +19,41 @@ import {
   hasAllMarks,
   projectGeoToCourse,
 } from "@/lib/briefing/geo";
-import { fetchWeather } from "@/lib/briefing/weather";
+import { fetchWeatherSeries, seriesIndexForTime } from "@/lib/briefing/weather";
 import type {
   BriefingState,
   Conditions,
   CustomRule,
   GeoPoint,
   MarkKey,
+  WeatherSeries,
 } from "@/lib/briefing/types";
+
+/** Apply one hour of the series to the state (wind/current values + arrow). */
+function hourState(
+  s: BriefingState,
+  series: WeatherSeries,
+  idx: number,
+): BriefingState {
+  const windDirDeg = series.windDir[idx];
+  const currentDirDeg = series.currentDir[idx];
+  const arrow = currentArrow(windDirDeg, currentDirDeg);
+  return {
+    ...s,
+    selectedTime: series.times[idx],
+    conditions: {
+      ...s.conditions,
+      windDirDeg,
+      windKnMin: series.windKn[idx],
+      windKnMax: series.gustKn[idx],
+      currentKn: series.currentKn[idx],
+      currentDirDeg,
+      waveM: series.waveM[idx],
+      weatherSource: series.source,
+    },
+    course: { ...s.course, currentFrom: arrow.from, currentTo: arrow.to },
+  };
+}
 
 type View = "race" | "admin";
 
@@ -84,55 +111,34 @@ export default function BriefingPage() {
     setWeatherBusy(true);
     setWeatherMsg(null);
     try {
-      const w = await fetchWeather(
+      const series = await fetchWeatherSeries(
         loc,
         state.conditions.date,
-        state.conditions.time,
         state.conditions.weatherModel,
       );
+      const idx = seriesIndexForTime(series, state.conditions.time);
       setState((s) => {
-        const arrow = currentArrow(w.windDirDeg, w.currentDirDeg);
-        const conditions = {
-          ...s.conditions,
-          windDirDeg: w.windDirDeg,
-          windKnMin: w.windKnMin,
-          windKnMax: w.windKnMax,
-          currentKn: w.currentKn,
-          currentDirDeg: w.currentDirDeg,
-          waveM: w.waveM,
-          weatherSource: w.source,
-        };
-        // Auto-build a standard Up/Down course on the area from the wind, so
-        // the morning briefing needs only the sailing area — no mark setting.
-        if (s.geo.location) {
-          const marks = autoCourse(
-            s.geo.location,
-            w.windDirDeg,
-            s.conditions.beatLengthNm,
-          );
-          const geo = { ...s.geo, marks };
-          return {
-            ...s,
-            conditions,
-            geo,
-            course: projectGeoToCourse(
-              geo,
-              w.windDirDeg,
-              w.currentDirDeg,
-              s.course,
-            ),
-          };
-        }
+        // Lay a standard Up/Down course on the area from this hour's wind, then
+        // apply the hour's wind/current. No mark setting needed.
+        const marks = autoCourse(
+          loc,
+          series.windDir[idx],
+          s.conditions.beatLengthNm,
+        );
+        const geo = { ...s.geo, marks };
+        const withHour = hourState({ ...s, geo, weatherSeries: series }, series, idx);
         return {
-          ...s,
-          conditions,
-          course: { ...s.course, currentFrom: arrow.from, currentTo: arrow.to },
+          ...withHour,
+          course: projectGeoToCourse(
+            geo,
+            series.windDir[idx],
+            series.currentDir[idx],
+            withHour.course,
+          ),
         };
       });
       setWeatherMsg(
-        `Geladen (${w.source}): Wind ${w.windDirDeg}° · ${w.windKnMin}–${w.windKnMax} kn · Strom ${w.currentKn} kn` +
-          (w.waveM != null ? ` · Welle ${w.waveM} m` : "") +
-          (state.geo.location ? " · Kurs automatisch gelegt" : ""),
+        `Tagesverlauf geladen (${series.source}) · ${series.times[0]}–${series.times[series.times.length - 1]} Uhr · Kurs automatisch gelegt`,
       );
     } catch {
       setWeatherMsg("Wetter konnte nicht geladen werden (Netzwerk prüfen).");
@@ -140,6 +146,13 @@ export default function BriefingPage() {
       setWeatherBusy(false);
     }
   };
+
+  const selectHour = (hhmm: string) =>
+    setState((s) => {
+      if (!s.weatherSeries) return s;
+      const idx = seriesIndexForTime(s.weatherSeries, hhmm);
+      return hourState(s, s.weatherSeries, idx);
+    });
 
   const applyCourseFromChart = () => {
     setState((s) => ({
@@ -252,6 +265,7 @@ export default function BriefingPage() {
             customRules={customRules}
             onChange={setConditions}
             onRefreshWeather={loadWeather}
+            onSelectHour={selectHour}
             weatherBusy={weatherBusy}
             hasLocation={!!state.geo.location}
           />
